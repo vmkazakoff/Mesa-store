@@ -38726,6 +38726,7 @@ var ACP_SERVER_REQUEST_ALIASES = {
   killTerminal: ["terminal/kill", "terminalKill"],
   readTextFile: ["fs/read_text_file", "fs/readTextFile"],
   releaseTerminal: ["terminal/release", "terminalRelease"],
+  createElicitation: ["elicitation/create", "createElicitation"],
   requestPermission: ["session/request_permission", "requestPermission"],
   terminalOutput: ["terminal/output", "terminalOutput"],
   waitForTerminalExit: ["terminal/wait_for_exit", "terminalWaitForExit"],
@@ -38820,7 +38821,7 @@ var AcpClientConnection = class {
     return this.requestWithFallback("setConfigOption", request);
   }
   buildClientCapabilities() {
-    var _a3, _b3;
+    var _a3, _b3, _c2, _d, _e2;
     const capabilities = { ...this.options.clientCapabilities };
     const fileSystem = (_a3 = this.options.delegate) == null ? void 0 : _a3.fileSystem;
     const terminal = (_b3 = this.options.delegate) == null ? void 0 : _b3.terminal;
@@ -38833,6 +38834,12 @@ var AcpClientConnection = class {
     }
     if (terminal) {
       capabilities.terminal = true;
+    }
+    if ((_c2 = this.options.delegate) == null ? void 0 : _c2.createElicitation) {
+      capabilities.elicitation = {
+        ...capabilities.elicitation,
+        form: (_e2 = (_d = capabilities.elicitation) == null ? void 0 : _d.form) != null ? _e2 : {}
+      };
     }
     return Object.keys(capabilities).length === 0 ? void 0 : capabilities;
   }
@@ -38853,6 +38860,13 @@ var AcpClientConnection = class {
       ACP_SERVER_NOTIFICATION_ALIASES.sessionUpdate,
       async (params) => this.dispatchSessionNotification(params)
     );
+    if (delegate == null ? void 0 : delegate.createElicitation) {
+      const createElicitation = delegate.createElicitation;
+      subscribeRequest(
+        ACP_SERVER_REQUEST_ALIASES.createElicitation,
+        (params) => createElicitation(params)
+      );
+    }
     if (delegate == null ? void 0 : delegate.requestPermission) {
       const requestPermission = delegate.requestPermission;
       subscribeRequest(
@@ -38954,6 +38968,9 @@ function mergeCapabilities(base, override) {
   const merged = { ...base, ...override };
   if ((base == null ? void 0 : base.auth) || (override == null ? void 0 : override.auth)) {
     merged.auth = { ...base == null ? void 0 : base.auth, ...override == null ? void 0 : override.auth };
+  }
+  if ((base == null ? void 0 : base.elicitation) || (override == null ? void 0 : override.elicitation)) {
+    merged.elicitation = { ...base == null ? void 0 : base.elicitation, ...override == null ? void 0 : override.elicitation };
   }
   if ((base == null ? void 0 : base.fs) || (override == null ? void 0 : override.fs)) {
     merged.fs = { ...base == null ? void 0 : base.fs, ...override == null ? void 0 : override.fs };
@@ -39553,6 +39570,137 @@ var OPENCODE_PROVIDER_CAPABILITIES = Object.freeze({
   supportsTurnSteer: false,
   reasoningControl: "effort"
 });
+
+// src/providers/opencode/runtime/opencodeElicitation.ts
+var CUSTOM_SUFFIX = "_custom";
+function buildElicitationQuestions(request) {
+  var _a3;
+  if (request.mode !== "form") {
+    return null;
+  }
+  const properties = (_a3 = request.requestedSchema) == null ? void 0 : _a3.properties;
+  if (!properties) {
+    return null;
+  }
+  const questions = [];
+  for (const [key, property] of Object.entries(properties)) {
+    if (isCustomCompanion(key, properties)) {
+      continue;
+    }
+    const question = toQuestion(key, property, properties, request.message);
+    if (question) {
+      questions.push(question);
+    }
+  }
+  return questions.length > 0 ? { questions } : null;
+}
+function buildElicitationResponse(request, answers) {
+  var _a3, _b3;
+  if (!answers) {
+    return { action: "cancel" };
+  }
+  const properties = (_b3 = (_a3 = request.requestedSchema) == null ? void 0 : _a3.properties) != null ? _b3 : {};
+  const content = {};
+  for (const [key, property] of Object.entries(properties)) {
+    if (isCustomCompanion(key, properties)) {
+      continue;
+    }
+    if (!(key in answers)) {
+      continue;
+    }
+    content[key] = coerceAnswer(property, answers[key]);
+  }
+  if (Object.keys(content).length === 0) {
+    return { action: "cancel" };
+  }
+  return { action: "accept", content };
+}
+function toQuestion(key, property, properties, message) {
+  const choices = readChoices(property);
+  const allowsCustom = `${key}${CUSTOM_SUFFIX}` in properties || choices.length === 0;
+  const title = cleanText(property.title) || key;
+  const description = cleanText(property.description);
+  const prompt = cleanText(message);
+  const question = choices.length > 0 ? description || prompt || title : prompt || description || title;
+  if (choices.length === 0 && property.type !== "string" && property.type !== "number" && property.type !== "integer" && property.type !== "boolean") {
+    if (!Array.isArray(property.type) && property.type) {
+      return null;
+    }
+  }
+  return {
+    header: title.slice(0, 12),
+    id: key,
+    isOther: allowsCustom && property.type !== "boolean",
+    multiSelect: property.type === "array",
+    options: property.type === "boolean" ? [
+      { description: "", label: "Yes", value: "true" },
+      { description: "", label: "No", value: "false" }
+    ] : choices,
+    question
+  };
+}
+function readChoices(property) {
+  var _a3;
+  const source = property.type === "array" ? property.items : property;
+  if (!source) {
+    return [];
+  }
+  const titled = (_a3 = source.anyOf) != null ? _a3 : source.oneOf;
+  if (Array.isArray(titled)) {
+    return titled.flatMap((choice) => readTitledChoice(choice));
+  }
+  if (!Array.isArray(source.enum)) {
+    return [];
+  }
+  return source.enum.map((value) => {
+    const label = String(value);
+    return { description: "", label, value: label };
+  });
+}
+function readTitledChoice(choice) {
+  if (choice.const === void 0) {
+    return [];
+  }
+  const value = String(choice.const);
+  return [{
+    description: cleanText(choice.description),
+    label: cleanText(choice.title) || value,
+    value
+  }];
+}
+function coerceAnswer(property, answer) {
+  var _a3;
+  if (property.type === "array") {
+    const values = Array.isArray(answer) ? answer : [answer];
+    return values.map((value) => {
+      var _a4;
+      return coerceScalar((_a4 = property.items) == null ? void 0 : _a4.type, value);
+    }).filter((value) => value !== "");
+  }
+  const scalar = Array.isArray(answer) ? (_a3 = answer[0]) != null ? _a3 : "" : answer;
+  return coerceScalar(property.type, scalar);
+}
+function coerceScalar(type, value) {
+  if (type === "boolean") {
+    return value === "true";
+  }
+  if (type === "integer") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  if (type === "number") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  return value;
+}
+function isCustomCompanion(key, properties) {
+  return key.endsWith(CUSTOM_SUFFIX) && key.slice(0, -CUSTOM_SUFFIX.length) in properties;
+}
+function cleanText(value) {
+  var _a3;
+  return (_a3 = value == null ? void 0 : value.trim()) != null ? _a3 : "";
+}
 
 // src/providers/opencode/normalization/opencodeToolNormalization.ts
 var TOOL_NAME_MAP2 = {
@@ -40210,6 +40358,7 @@ var OpencodeChatRuntime = class {
     this.providerId = "opencode";
     this.activeTurn = null;
     this.approvalCallback = null;
+    this.askUserQuestionCallback = null;
     this.connection = null;
     this.contextUsage = null;
     this.currentDatabasePath = null;
@@ -40536,7 +40685,8 @@ var OpencodeChatRuntime = class {
   }
   setApprovalDismisser(_dismisser) {
   }
-  setAskUserQuestionCallback(_callback) {
+  setAskUserQuestionCallback(callback) {
+    this.askUserQuestionCallback = callback;
   }
   setExitPlanModeCallback(_callback) {
   }
@@ -40616,6 +40766,7 @@ var OpencodeChatRuntime = class {
           readTextFile: (request) => this.readTextFile(request),
           writeTextFile: (request) => this.writeTextFile(request)
         },
+        createElicitation: (request) => this.handleElicitationRequest(request),
         onSessionNotification: (notification) => this.handleSessionNotification(notification),
         requestPermission: (request) => this.handlePermissionRequest(request)
       },
@@ -41081,6 +41232,14 @@ var OpencodeChatRuntime = class {
       }
     );
     return mapApprovalDecision(decision, request.options);
+  }
+  async handleElicitationRequest(request) {
+    const questions = buildElicitationQuestions(request);
+    if (!questions || !this.askUserQuestionCallback) {
+      return { action: "cancel" };
+    }
+    const answers = await this.askUserQuestionCallback(questions);
+    return buildElicitationResponse(request, answers);
   }
   setSupportedCommands(commands) {
     this.supportedCommands = commands.map((command) => ({ ...command }));
