@@ -1,0 +1,88 @@
+.workspace-leaf-content[data-type="mesa-html"] .view-content,
+.workspace-leaf-content[data-type="mesa-html-code"] .view-content {
+	padding: 0;
+	overflow: hidden;
+}
+
+.mesa-html-view {
+	height: 100%;
+	padding: 0;
+	overflow: hidden;
+	position: relative;
+}
+
+.mesa-html-page {
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	overflow: auto;
+}
+
+.mesa-html-editor {
+	width: 100%;
+	height: 100%;
+	max-width: none;
+}
+
+.mesa-html-editor .cm-editor {
+	height: 100%;
+}
+
+.mesa-html-editor .cm-scroller {
+	overflow: auto;
+	font-family: var(--font-monospace);
+}
+
+[data-mesa-missing] {
+	display: inline-block;
+	padding: 0.2em 0.45em;
+	border: 1px dashed currentColor;
+	cursor: pointer;
+}
+
+.workspace-leaf-content[data-type="mesa-html-file"] .view-content {
+	height: 100%;
+	padding: 0;
+}
+
+.mesa-html-opaque {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2rem;
+	color: var(--text-normal);
+}
+
+.mesa-html-opaque-card {
+	width: min(28rem, 100%);
+	text-align: center;
+}
+
+.mesa-html-opaque-ext {
+	display: inline-block;
+	margin-bottom: 0.9rem;
+	padding: 0.15rem 0.55rem;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: var(--font-semibold);
+	letter-spacing: 0.08em;
+}
+
+.mesa-html-opaque-name {
+	margin: 0 0 0.55rem;
+	font-size: 1.35rem;
+	line-height: 1.3;
+}
+
+.mesa-html-opaque-note {
+	margin: 0 0 1.25rem;
+	color: var(--text-muted);
+	line-height: 1.45;
+}
+.mesa-html-view.is-code .mesa-html-page,
+.mesa-html-view.is-page .mesa-html-editor {
+	display: none;
+}

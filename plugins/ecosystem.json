@@ -56,6 +56,14 @@
       "path": "plugins/mesa-skills",
       "minAppVersion": "1.0.0",
       "description": "Создаёт папку AGENTS, через которую синхронизируются навыки, правила и команды агентов"
+    },
+    {
+      "id": "mesa-html",
+      "name": "Mesa | HTML",
+      "version": "1.0.0",
+      "path": "plugins/mesa-html",
+      "minAppVersion": "1.4.0",
+      "description": "Редактор кода и красивый HTML внутри vault, плюс показ типов файлов, которые Obsidian по умолчанию прячет"
     }
   ]
 }
