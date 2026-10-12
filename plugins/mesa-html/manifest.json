@@ -1,7 +1,7 @@
 {
 	"id": "mesa-html",
 	"name": "Mesa | HTML",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.4.0",
 	"description": "Редактор кода и красивый HTML внутри vault, плюс показ типов файлов, которые Obsidian по умолчанию прячет",
 	"author": "MKRobotsAI",
