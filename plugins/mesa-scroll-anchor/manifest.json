@@ -1,0 +1,9 @@
+{
+	"id": "mesa-scroll-anchor",
+	"name": "Mesa | Scroll Anchor",
+	"version": "1.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Возвращает заметку к верхней строке, когда её открывают заново",
+	"author": "MKRobotsAI",
+	"isDesktopOnly": false
+}
