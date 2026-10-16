@@ -22392,10 +22392,143 @@ function getHiddenProviderCommandSet(settings, providerId) {
   return new Set(getHiddenProviderCommands(settings, providerId).map((command) => command.toLowerCase()));
 }
 
-// src/providers/codex/modelSelection.ts
-function encodeCodexModelSelectionId(modelId) {
-  return encodeProviderModelSelectionId("codex", modelId);
+// src/providers/codex/codexModelCatalog.ts
+var MODEL_LIST_PAGE_SIZE = 100;
+var MAX_MODEL_LIST_PAGES = 20;
+function normalizeCodexDiscoveredModels(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const models = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const entry of value) {
+    const model = parseCodexDiscoveredModel(entry);
+    if (!model || seen.has(model.model)) {
+      continue;
+    }
+    seen.add(model.model);
+    models.push(model);
+  }
+  return models;
 }
+function sameCodexDiscoveredModels(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+function findCodexDiscoveredModel(models, modelId) {
+  var _a3;
+  const normalized = modelId.trim();
+  if (!normalized) {
+    return null;
+  }
+  return (_a3 = models.find((model) => model.model === normalized || model.id === normalized)) != null ? _a3 : null;
+}
+function findPreferredCodexModel(models) {
+  var _a3, _b3;
+  const visible = models.filter((model) => !model.hidden);
+  return (_b3 = (_a3 = visible.find((model) => model.isDefault)) != null ? _a3 : visible[0]) != null ? _b3 : null;
+}
+async function listCodexModels(transport) {
+  const models = [];
+  const seen = /* @__PURE__ */ new Set();
+  let cursor = null;
+  for (let page = 0; page < MAX_MODEL_LIST_PAGES; page += 1) {
+    const result = await transport.request("model/list", {
+      includeHidden: false,
+      limit: MODEL_LIST_PAGE_SIZE,
+      ...cursor ? { cursor } : {}
+    });
+    const pageModels = normalizeCodexDiscoveredModels(result == null ? void 0 : result.data);
+    for (const model of pageModels) {
+      if (model.hidden || seen.has(model.model)) {
+        continue;
+      }
+      seen.add(model.model);
+      models.push(model);
+    }
+    cursor = typeof (result == null ? void 0 : result.nextCursor) === "string" && result.nextCursor.trim() ? result.nextCursor : null;
+    if (!cursor) {
+      break;
+    }
+  }
+  return models;
+}
+function parseCodexDiscoveredModel(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value;
+  const model = readString(record.model) || readString(record.id);
+  if (!model) {
+    return null;
+  }
+  const id = readString(record.id) || model;
+  const displayName = readString(record.displayName) || model;
+  const defaultReasoningEffort = readString(record.defaultReasoningEffort);
+  return {
+    id,
+    model,
+    displayName,
+    description: readString(record.description),
+    hidden: record.hidden === true,
+    isDefault: record.isDefault === true,
+    defaultReasoningEffort,
+    defaultServiceTier: readString(record.defaultServiceTier) || null,
+    supportedReasoningEfforts: parseReasoningEfforts(record.supportedReasoningEfforts),
+    serviceTiers: parseServiceTiers(record.serviceTiers)
+  };
+}
+function parseReasoningEfforts(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const efforts = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry;
+    const reasoningEffort = readString(record.reasoningEffort);
+    if (!reasoningEffort || seen.has(reasoningEffort)) {
+      continue;
+    }
+    seen.add(reasoningEffort);
+    efforts.push({
+      reasoningEffort,
+      description: readString(record.description)
+    });
+  }
+  return efforts;
+}
+function parseServiceTiers(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const tiers = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry;
+    const id = readString(record.id);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    tiers.push({
+      id,
+      name: readString(record.name) || id,
+      description: readString(record.description)
+    });
+  }
+  return tiers;
+}
+function readString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+// src/providers/codex/modelSelection.ts
 function isCodexModelSelectionId(modelId) {
   return isProviderModelSelectionId("codex", modelId);
 }
@@ -22403,40 +22536,8 @@ function toCodexRuntimeModelId(modelId) {
   return toProviderRuntimeModelId("codex", modelId);
 }
 
-// src/providers/codex/types/models.ts
-var CODEX_SPARK_MODEL = "gpt-5.3-codex-spark";
-var DEFAULT_CODEX_MINI_MODEL = "gpt-5.4-mini";
-var DEFAULT_CODEX_PRIMARY_MODEL = "gpt-5.5";
-var FAST_TIER_CODEX_MODEL = DEFAULT_CODEX_PRIMARY_MODEL;
-function formatCodexModelSuffix(suffix) {
-  return suffix.split("-").filter(Boolean).map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase()).join(" ");
-}
-function formatCodexModelLabel(model) {
-  const match = model.match(/^gpt-([^-]+)(?:-(.+))?$/i);
-  if (!match) {
-    return model;
-  }
-  const [, version, suffix] = match;
-  return `GPT-${version}${suffix ? ` ${formatCodexModelSuffix(suffix)}` : ""}`;
-}
-function createCodexModelOption(model, description) {
-  return {
-    value: model,
-    label: formatCodexModelLabel(model),
-    description
-  };
-}
-var DEFAULT_CODEX_MINI_MODEL_LABEL = formatCodexModelLabel(DEFAULT_CODEX_MINI_MODEL);
-var DEFAULT_CODEX_PRIMARY_MODEL_LABEL = formatCodexModelLabel(DEFAULT_CODEX_PRIMARY_MODEL);
-var FAST_TIER_CODEX_MODEL_LABEL = formatCodexModelLabel(FAST_TIER_CODEX_MODEL);
-var FAST_TIER_CODEX_DESCRIPTION = `Enable ${FAST_TIER_CODEX_MODEL_LABEL} fast mode for this conversation. Faster responses use more credits.`;
-var DEFAULT_CODEX_MODELS = [
-  createCodexModelOption(DEFAULT_CODEX_MINI_MODEL, "Fast"),
-  createCodexModelOption(DEFAULT_CODEX_PRIMARY_MODEL, "Latest")
-];
-var DEFAULT_CODEX_MODEL_SET = new Set(DEFAULT_CODEX_MODELS.map((model) => model.value));
-
 // src/providers/codex/settings.ts
+var CODEX_SPARK_MODEL = "gpt-5.3-codex-spark";
 function normalizeCodexInstallationMethod(value) {
   return value === "wsl" ? "wsl" : "native-windows";
 }
@@ -22449,6 +22550,7 @@ var DEFAULT_CODEX_PROVIDER_SETTINGS = Object.freeze({
   cliPath: "",
   cliPathsByHost: {},
   customModels: "",
+  discoveredModels: [],
   reasoningSummary: "detailed",
   environmentVariables: "",
   environmentHash: "",
@@ -22512,6 +22614,7 @@ function getCodexProviderSettings(settings) {
     cliPath: (_c2 = config.cliPath) != null ? _c2 : DEFAULT_CODEX_PROVIDER_SETTINGS.cliPath,
     cliPathsByHost,
     customModels: (_d = config.customModels) != null ? _d : DEFAULT_CODEX_PROVIDER_SETTINGS.customModels,
+    discoveredModels: normalizeCodexDiscoveredModels(config.discoveredModels),
     reasoningSummary: (_e2 = config.reasoningSummary) != null ? _e2 : DEFAULT_CODEX_PROVIDER_SETTINGS.reasoningSummary,
     environmentVariables: (_f2 = config.environmentVariables) != null ? _f2 : DEFAULT_CODEX_PROVIDER_SETTINGS.environmentVariables,
     environmentHash: (_g = config.environmentHash) != null ? _g : DEFAULT_CODEX_PROVIDER_SETTINGS.environmentHash,
@@ -22558,6 +22661,7 @@ function updateCodexProviderSettings(settings, updates) {
     cliPath: next.cliPath,
     cliPathsByHost: next.cliPathsByHost,
     customModels: next.customModels,
+    discoveredModels: next.discoveredModels,
     reasoningSummary: next.reasoningSummary,
     environmentVariables: next.environmentVariables,
     environmentHash: next.environmentHash,
@@ -34210,6 +34314,11 @@ function serializeSubagentToml(agent) {
 function createCodexCliResolver() {
   return new CodexCliResolver();
 }
+var codexSessionWarmupPolicy = {
+  resolveMode() {
+    return "runtime";
+  }
+};
 async function createCodexWorkspaceServices(plugin, vaultAdapter, homeAdapter) {
   const subagentStorage = new CodexSubagentStorage(vaultAdapter);
   const agentMentionProvider = new CodexAgentMentionProvider(subagentStorage);
@@ -34228,6 +34337,7 @@ async function createCodexWorkspaceServices(plugin, vaultAdapter, homeAdapter) {
     commandCatalog,
     agentMentionProvider,
     cliResolver: createCodexCliResolver(),
+    sessionWarmupPolicy: codexSessionWarmupPolicy,
     refreshAgentMentions: async () => {
       await agentMentionProvider.loadAgents();
     }
@@ -34299,6 +34409,149 @@ var QueryBackedInlineEditService = class {
   }
 };
 
+// src/providers/codex/modelOptions.ts
+function getCodexModelOptions(settings) {
+  const visible = getCodexProviderSettings(settings).discoveredModels.filter((model) => !model.hidden);
+  const preferred = visible.find((model) => model.isDefault);
+  const ordered = preferred ? [preferred, ...visible.filter((model) => model.model !== preferred.model)] : visible;
+  return ordered.map((model) => ({
+    value: model.model,
+    label: model.displayName || model.model,
+    ...model.description ? { description: model.description } : {}
+  }));
+}
+function normalizeCodexModelVariant(model, settings) {
+  var _a3, _b3, _c2, _d;
+  const runtimeModel = toCodexRuntimeModelId(model);
+  const catalog = getCodexProviderSettings(settings).discoveredModels;
+  if (catalog.length === 0) {
+    return runtimeModel;
+  }
+  return (_d = (_c2 = (_a3 = findCodexDiscoveredModel(catalog, runtimeModel)) == null ? void 0 : _a3.model) != null ? _c2 : (_b3 = findPreferredCodexModel(catalog)) == null ? void 0 : _b3.model) != null ? _d : runtimeModel;
+}
+function resolveCodexListedModel(settings, model) {
+  var _a3;
+  if (!model) {
+    return void 0;
+  }
+  const catalog = getCodexProviderSettings(settings).discoveredModels;
+  if (catalog.length === 0) {
+    return void 0;
+  }
+  return (_a3 = findCodexDiscoveredModel(catalog, toCodexRuntimeModelId(model))) == null ? void 0 : _a3.model;
+}
+function resolveCodexListedEffort(settings, model, effort) {
+  var _a3;
+  const discovered = model ? findCodexDiscoveredModel(getCodexProviderSettings(settings).discoveredModels, model) : null;
+  if (!discovered) {
+    return void 0;
+  }
+  const selected = typeof effort === "string" ? effort.trim() : "";
+  if (discovered.supportedReasoningEfforts.some((option) => option.reasoningEffort === selected)) {
+    return selected;
+  }
+  const fallback = discovered.defaultReasoningEffort || ((_a3 = discovered.supportedReasoningEfforts[0]) == null ? void 0 : _a3.reasoningEffort) || "";
+  return discovered.supportedReasoningEfforts.some((option) => option.reasoningEffort === fallback) ? fallback : void 0;
+}
+function resolveCodexListedServiceTier(settings, model, serviceTier) {
+  const selected = typeof serviceTier === "string" ? serviceTier.trim() : "";
+  if (!selected || selected === "default" || !model) {
+    return null;
+  }
+  const discovered = findCodexDiscoveredModel(
+    getCodexProviderSettings(settings).discoveredModels,
+    model
+  );
+  if (!(discovered == null ? void 0 : discovered.serviceTiers.some((tier) => tier.id === selected))) {
+    return null;
+  }
+  if (discovered.defaultServiceTier && selected === discovered.defaultServiceTier) {
+    return null;
+  }
+  return selected;
+}
+function getCodexReasoningOptions(settings, model) {
+  const discovered = findCodexDiscoveredModel(
+    getCodexProviderSettings(settings).discoveredModels,
+    toCodexRuntimeModelId(model)
+  );
+  if (!discovered) {
+    return [];
+  }
+  return discovered.supportedReasoningEfforts.map((option) => ({
+    value: option.reasoningEffort,
+    label: option.description || option.reasoningEffort
+  }));
+}
+function getCodexDefaultReasoningValue(settings, model) {
+  var _a3;
+  const discovered = findCodexDiscoveredModel(
+    getCodexProviderSettings(settings).discoveredModels,
+    toCodexRuntimeModelId(model)
+  );
+  return (discovered == null ? void 0 : discovered.defaultReasoningEffort) || ((_a3 = discovered == null ? void 0 : discovered.supportedReasoningEfforts[0]) == null ? void 0 : _a3.reasoningEffort) || "medium";
+}
+function getCodexServiceTierToggle(settings) {
+  const model = typeof settings.model === "string" ? settings.model : "";
+  const discovered = findCodexDiscoveredModel(
+    getCodexProviderSettings(settings).discoveredModels,
+    toCodexRuntimeModelId(model)
+  );
+  const fastTier = discovered == null ? void 0 : discovered.serviceTiers.find((tier) => tier.id === "fast");
+  if (!fastTier) {
+    return null;
+  }
+  return {
+    inactiveValue: "default",
+    inactiveLabel: "Standard",
+    activeValue: fastTier.id,
+    activeLabel: fastTier.name || "Fast",
+    ...fastTier.description ? { description: fastTier.description } : {}
+  };
+}
+function resolveCodexModelSelection(settings, currentModel) {
+  var _a3, _b3;
+  const catalog = getCodexProviderSettings(settings).discoveredModels;
+  if (catalog.length === 0) {
+    return currentModel || null;
+  }
+  const envModel = getConfiguredEnvModel(settings);
+  if (envModel) {
+    const listedEnvModel = findCodexDiscoveredModel(catalog, envModel);
+    if (listedEnvModel) {
+      return listedEnvModel.model;
+    }
+  }
+  const listedCurrent = findCodexDiscoveredModel(catalog, toCodexRuntimeModelId(currentModel));
+  if (listedCurrent) {
+    return listedCurrent.model;
+  }
+  return (_b3 = (_a3 = findPreferredCodexModel(catalog)) == null ? void 0 : _a3.model) != null ? _b3 : null;
+}
+function storeCodexDiscoveredModels(settings, models, assignActiveModel) {
+  var _a3, _b3;
+  const current = getCodexProviderSettings(settings).discoveredModels;
+  const catalogChanged = !sameCodexDiscoveredModels(current, models);
+  if (catalogChanged) {
+    updateCodexProviderSettings(settings, { discoveredModels: models });
+  }
+  if (!assignActiveModel) {
+    return catalogChanged;
+  }
+  const currentModel = typeof settings.model === "string" ? settings.model : "";
+  const normalized = currentModel ? normalizeCodexModelVariant(currentModel, settings) : (_b3 = (_a3 = findPreferredCodexModel(getCodexProviderSettings(settings).discoveredModels)) == null ? void 0 : _a3.model) != null ? _b3 : "";
+  if (!normalized || normalized === currentModel) {
+    return catalogChanged;
+  }
+  settings.model = normalized;
+  return true;
+}
+function getConfiguredEnvModel(settings) {
+  var _a3;
+  const modelId = (_a3 = getRuntimeEnvironmentVariables(settings, "codex").OPENAI_MODEL) == null ? void 0 : _a3.trim();
+  return modelId ? modelId : null;
+}
+
 // src/providers/codex/runtime/CodexAuxQueryRunner.ts
 var CodexAuxQueryRunner = class {
   constructor(plugin) {
@@ -34309,14 +34562,18 @@ var CodexAuxQueryRunner = class {
     this.launchSpec = null;
   }
   async query(config, prompt) {
-    var _a3, _b3, _c2, _d, _e2, _f2, _g, _h2, _i;
+    var _a3, _b3, _c2, _d, _e2, _f2, _g, _h2, _i, _j;
     if (!this.process || !this.transport) {
       await this.startProcess();
     }
     if (!this.threadId) {
-      const model = toCodexRuntimeModelId((_a3 = config.model) != null ? _a3 : this.resolveProviderModel());
+      await this.refreshModelCatalog();
+      const model = resolveCodexListedModel(
+        this.plugin.settings,
+        (_a3 = config.model) != null ? _a3 : this.resolveProviderModel()
+      );
       const result = await this.transport.request("thread/start", {
-        model,
+        ...model ? { model } : {},
         cwd: (_c2 = (_b3 = this.launchSpec) == null ? void 0 : _b3.targetCwd) != null ? _c2 : process.cwd(),
         approvalPolicy: "never",
         sandbox: "read-only",
@@ -34374,19 +34631,23 @@ var CodexAuxQueryRunner = class {
       (_f2 = this.process) == null ? void 0 : _f2.offExit(exitHandler);
       throw new Error("Cancelled");
     }
+    const turnModel = resolveCodexListedModel(
+      this.plugin.settings,
+      (_g = config.model) != null ? _g : this.resolveProviderModel()
+    );
     const turnResult = await this.transport.request("turn/start", {
       threadId: this.threadId,
       input: [{ type: "text", text: prompt }],
-      model: config.model ? toCodexRuntimeModelId(config.model) : void 0
+      ...turnModel ? { model: turnModel } : {}
     });
     turnId = turnResult.turn.id;
     try {
       await donePromise;
     } finally {
-      (_g = config.abortController) == null ? void 0 : _g.signal.removeEventListener("abort", abortHandler);
-      (_h2 = this.process) == null ? void 0 : _h2.offExit(exitHandler);
+      (_h2 = config.abortController) == null ? void 0 : _h2.signal.removeEventListener("abort", abortHandler);
+      (_i = this.process) == null ? void 0 : _i.offExit(exitHandler);
     }
-    if ((_i = config.abortController) == null ? void 0 : _i.signal.aborted) {
+    if ((_j = config.abortController) == null ? void 0 : _j.signal.aborted) {
       throw new Error("Cancelled");
     }
     if (turnError) {
@@ -34413,7 +34674,28 @@ var CodexAuxQueryRunner = class {
       "codex"
     );
     const model = providerSettings.model;
-    return typeof model === "string" ? toCodexRuntimeModelId(model) : DEFAULT_CODEX_PRIMARY_MODEL;
+    return typeof model === "string" ? model : void 0;
+  }
+  async refreshModelCatalog() {
+    const transport = this.transport;
+    if (!transport) {
+      return;
+    }
+    let models;
+    try {
+      models = await listCodexModels(transport);
+    } catch (e2) {
+      return;
+    }
+    if (models.length === 0) {
+      return;
+    }
+    const settings = this.plugin.settings;
+    const assignActiveModel = ProviderRegistry.resolveSettingsProviderId(settings) === "codex";
+    if (!storeCodexDiscoveredModels(settings, models, assignActiveModel)) {
+      return;
+    }
+    await this.plugin.saveSettings();
   }
   async startProcess() {
     this.launchSpec = resolveCodexAppServerLaunchSpec(this.plugin, "codex");
@@ -34532,91 +34814,12 @@ var CODEX_PROVIDER_CAPABILITIES = Object.freeze({
   reasoningControl: "effort"
 });
 
-// src/providers/codex/modelOptions.ts
-function createCustomCodexModelOption(modelId, description) {
-  const runtimeModelId = toCodexRuntimeModelId(modelId);
-  return {
-    value: encodeCodexModelSelectionId(runtimeModelId),
-    label: formatCodexModelLabel(runtimeModelId),
-    description
-  };
-}
-function getConfiguredEnvModel(settings) {
-  var _a3;
-  const modelId = (_a3 = getRuntimeEnvironmentVariables(settings, "codex").OPENAI_MODEL) == null ? void 0 : _a3.trim();
-  return modelId ? modelId : null;
-}
-function getConfiguredEnvCustomModel(settings) {
-  const modelId = getConfiguredEnvModel(settings);
-  return modelId && !DEFAULT_CODEX_MODEL_SET.has(modelId) ? modelId : null;
-}
-function parseConfiguredCustomModelIds2(value) {
-  const modelIds = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const line of value.split(/\r?\n/)) {
-    const modelId = line.trim();
-    if (!modelId || seen.has(modelId)) {
-      continue;
-    }
-    seen.add(modelId);
-    modelIds.push(modelId);
-  }
-  return modelIds;
-}
-function getCodexModelOptions(settings) {
-  const models = [...DEFAULT_CODEX_MODELS];
-  const seenModelIds = new Set(models.map((model) => toCodexRuntimeModelId(model.value)));
-  const envModel = getConfiguredEnvCustomModel(settings);
-  if (envModel) {
-    seenModelIds.add(envModel);
-    models.unshift(createCustomCodexModelOption(envModel, "Custom (env)"));
-  }
-  const codexSettings = getCodexProviderSettings(settings);
-  for (const configuredModelId of parseConfiguredCustomModelIds2(codexSettings.customModels)) {
-    const modelId = toCodexRuntimeModelId(configuredModelId);
-    if (seenModelIds.has(modelId)) {
-      continue;
-    }
-    seenModelIds.add(modelId);
-    models.push(createCustomCodexModelOption(modelId, "Custom model"));
-  }
-  return models;
-}
-function resolveCodexModelSelection(settings, currentModel) {
-  var _a3, _b3, _c2;
-  const modelOptions = getCodexModelOptions(settings);
-  const envModel = getConfiguredEnvModel(settings);
-  if (envModel) {
-    const envRuntimeModel = toCodexRuntimeModelId(envModel);
-    const envOption = modelOptions.find(
-      (option) => option.value === envModel || toCodexRuntimeModelId(option.value) === envRuntimeModel
-    );
-    return (_a3 = envOption == null ? void 0 : envOption.value) != null ? _a3 : envModel;
-  }
-  if (currentModel) {
-    const currentRuntimeModel = toCodexRuntimeModelId(currentModel);
-    const currentOption = modelOptions.find(
-      (option) => option.value === currentModel || toCodexRuntimeModelId(option.value) === currentRuntimeModel
-    );
-    if (currentOption) {
-      return currentOption.value;
-    }
-  }
-  return (_c2 = (_b3 = modelOptions[0]) == null ? void 0 : _b3.value) != null ? _c2 : DEFAULT_CODEX_PRIMARY_MODEL;
-}
-
 // src/providers/codex/types/index.ts
 function getCodexState(providerState) {
   return providerState != null ? providerState : {};
 }
 
 // src/providers/codex/ui/CodexChatUIConfig.ts
-var EFFORT_LEVELS2 = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "XHigh" }
-];
 var CODEX_PERMISSION_MODE_TOGGLE = {
   inactiveValue: "normal",
   inactiveLabel: t10("ui.permissionSafe"),
@@ -34624,13 +34827,6 @@ var CODEX_PERMISSION_MODE_TOGGLE = {
   activeLabel: t10("ui.permissionAuto"),
   planValue: "plan",
   planLabel: t10("ui.permissionPlan")
-};
-var CODEX_SERVICE_TIER_TOGGLE = {
-  inactiveValue: "default",
-  inactiveLabel: "Standard",
-  activeValue: "fast",
-  activeLabel: "Fast",
-  description: FAST_TIER_CODEX_DESCRIPTION
 };
 var DEFAULT_CONTEXT_WINDOW = 2e5;
 function looksLikeCodexModel(model) {
@@ -34655,17 +34851,17 @@ var codexChatUIConfig = {
   isAdaptiveReasoningModel(_model, _settings) {
     return true;
   },
-  getReasoningOptions(_model, _settings) {
-    return [...EFFORT_LEVELS2];
+  getReasoningOptions(model, settings) {
+    return getCodexReasoningOptions(settings, model);
   },
-  getDefaultReasoningValue(_model, _settings) {
-    return "medium";
+  getDefaultReasoningValue(model, settings) {
+    return getCodexDefaultReasoningValue(settings, model);
   },
   getContextWindowSize() {
     return DEFAULT_CONTEXT_WINDOW;
   },
   isDefaultModel(model) {
-    return DEFAULT_CODEX_MODEL_SET.has(model);
+    return looksLikeCodexModel(toCodexRuntimeModelId(model));
   },
   applyModelDefaults(model, settings) {
     if (!settings || typeof settings !== "object") {
@@ -34674,19 +34870,14 @@ var codexChatUIConfig = {
     applyCodexModelDefaults(toCodexRuntimeModelId(model), settings);
   },
   normalizeModelVariant(model, settings) {
-    const runtimeModel = toCodexRuntimeModelId(model);
-    const option = getCodexModelOptions(settings).find(
-      (candidate) => candidate.value === model || toCodexRuntimeModelId(candidate.value) === runtimeModel
-    );
-    if (option) {
-      return option.value;
-    }
-    return DEFAULT_CODEX_PRIMARY_MODEL;
+    return normalizeCodexModelVariant(model, settings);
   },
   getCustomModelIds(envVars) {
+    var _a3;
     const ids = /* @__PURE__ */ new Set();
-    if (envVars.OPENAI_MODEL && !DEFAULT_CODEX_MODEL_SET.has(envVars.OPENAI_MODEL)) {
-      ids.add(envVars.OPENAI_MODEL);
+    const envModel = (_a3 = envVars.OPENAI_MODEL) == null ? void 0 : _a3.trim();
+    if (envModel) {
+      ids.add(envModel);
     }
     return ids;
   },
@@ -34694,7 +34885,7 @@ var codexChatUIConfig = {
     return CODEX_PERMISSION_MODE_TOGGLE;
   },
   getServiceTierToggle(settings) {
-    return settings.model === FAST_TIER_CODEX_MODEL ? CODEX_SERVICE_TIER_TOGGLE : null;
+    return getCodexServiceTierToggle(settings);
   },
   getProviderIcon() {
     return OPENAI_PROVIDER_ICON;
@@ -37113,18 +37304,6 @@ function resolveCodexSandboxConfig(permissionMode, codexSafeMode = "workspace-wr
   }
   return { approvalPolicy: "on-request", sandbox: codexSafeMode };
 }
-function resolveCodexServiceTier(serviceTier, model) {
-  if (model !== FAST_TIER_CODEX_MODEL) {
-    return null;
-  }
-  return serviceTier === "fast" ? "fast" : null;
-}
-var EFFORT_MAP = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "xhigh"
-};
 var CodexChatRuntime = class {
   constructor(plugin) {
     this.providerId = "codex";
@@ -37215,11 +37394,12 @@ var CodexChatRuntime = class {
       await this.shutdownProcess();
       await this.startAppServer(launchSpec, clientConfigKey);
     }
+    await this.refreshModelCatalog();
     this.setReady(true);
     return shouldRebuild;
   }
   async *query(originalTurn, _conversationHistory, queryOptions) {
-    var _a3, _b3, _c2, _d, _e2, _f2, _g, _h2, _i, _j, _k3, _l2, _m, _n, _o, _p;
+    var _a3, _b3, _c2, _d, _e2, _f2, _g, _h2, _i, _j, _k3, _l2, _m, _n, _o;
     this.resetTurnMetadata();
     let turn = originalTurn;
     await this.ensureReady();
@@ -37259,10 +37439,10 @@ var CodexChatRuntime = class {
         const permissionMode = this.resolveSandboxConfig();
         const resumeResult = await this.transport.request("thread/resume", {
           threadId: existingThreadId,
-          model: model != null ? model : DEFAULT_CODEX_PRIMARY_MODEL,
+          ...model ? { model } : {},
           approvalPolicy: permissionMode.approvalPolicy,
           sandbox: permissionMode.sandbox,
-          serviceTier: resolveCodexServiceTier(this.getProviderSettings().serviceTier, model != null ? model : DEFAULT_CODEX_PRIMARY_MODEL),
+          serviceTier: resolveCodexListedServiceTier(this.getProviderSettings(), model, this.getProviderSettings().serviceTier),
           baseInstructions: promptText,
           experimentalRawEvents: true,
           persistExtendedHistory: true
@@ -37276,11 +37456,11 @@ var CodexChatRuntime = class {
       } else {
         const permissionMode = this.resolveSandboxConfig();
         const startResult = await this.transport.request("thread/start", {
-          model: model != null ? model : DEFAULT_CODEX_PRIMARY_MODEL,
+          ...model ? { model } : {},
           cwd: (_d = (_c2 = (_b3 = this.launchSpec) == null ? void 0 : _b3.targetCwd) != null ? _c2 : getVaultPath(this.plugin.app)) != null ? _d : void 0,
           approvalPolicy: permissionMode.approvalPolicy,
           sandbox: permissionMode.sandbox,
-          serviceTier: resolveCodexServiceTier(this.getProviderSettings().serviceTier, model != null ? model : DEFAULT_CODEX_PRIMARY_MODEL),
+          serviceTier: resolveCodexListedServiceTier(this.getProviderSettings(), model, this.getProviderSettings().serviceTier),
           baseInstructions: promptText,
           experimentalRawEvents: true,
           persistExtendedHistory: true
@@ -37306,12 +37486,12 @@ var CodexChatRuntime = class {
         const turnInputBundle = this.buildInput(turn.prompt, turn.request.images, skillInputs);
         this.registerActiveInputBundle(turnInputBundle);
         const providerSettings = this.getProviderSettings();
-        const effort = (_i = EFFORT_MAP[providerSettings.effortLevel]) != null ? _i : "medium";
-        const resolvedModel = model != null ? model : DEFAULT_CODEX_PRIMARY_MODEL;
+        const resolvedModel = model;
+        const effort = resolveCodexListedEffort(providerSettings, resolvedModel, providerSettings.effortLevel);
         const isPlanMode = providerSettings.permissionMode === "plan";
         const externalContextPaths = this.resolveExternalContextPaths(turn, queryOptions);
         const permissionMode = this.resolveSandboxConfig();
-        const transcriptRootTarget = (_l2 = (_k3 = (_j = this.runtimeContext) == null ? void 0 : _j.sessionsDirTarget) != null ? _k3 : deriveCodexSessionsRootFromSessionPath(threadTargetPath)) != null ? _l2 : this.resolveTranscriptRootTarget(sessionFilePathHint);
+        const transcriptRootTarget = (_k3 = (_j = (_i = this.runtimeContext) == null ? void 0 : _i.sessionsDirTarget) != null ? _j : deriveCodexSessionsRootFromSessionPath(threadTargetPath)) != null ? _k3 : this.resolveTranscriptRootTarget(sessionFilePathHint);
         const sandboxPolicy = this.buildTurnSandboxPolicy(
           externalContextPaths,
           permissionMode.sandbox,
@@ -37321,21 +37501,21 @@ var CodexChatRuntime = class {
         const collaborationMode = {
           mode: isPlanMode ? "plan" : "default",
           settings: {
-            model: resolvedModel,
-            reasoning_effort: effort,
+            ...resolvedModel ? { model: resolvedModel } : {},
+            reasoning_effort: effort != null ? effort : null,
             developer_instructions: null
           }
         };
         const summary = getEffectiveCodexReasoningSummary(providerSettings, resolvedModel);
-        const serviceTier = resolveCodexServiceTier(providerSettings.serviceTier, resolvedModel);
-        (_m = this.notificationRouter) == null ? void 0 : _m.beginTurn({ isPlanTurn: isPlanMode });
+        const serviceTier = resolveCodexListedServiceTier(providerSettings, resolvedModel, providerSettings.serviceTier);
+        (_l2 = this.notificationRouter) == null ? void 0 : _l2.beginTurn({ isPlanTurn: isPlanMode });
         const turnResult = await this.transport.request("turn/start", {
           threadId,
           input: turnInputBundle.input,
           approvalPolicy: permissionMode.approvalPolicy,
-          model: resolvedModel,
+          ...resolvedModel ? { model: resolvedModel } : {},
           serviceTier,
-          effort,
+          ...effort ? { effort } : {},
           summary,
           sandboxPolicy,
           collaborationMode
@@ -37384,7 +37564,7 @@ var CodexChatRuntime = class {
       yield { type: "done" };
       return;
     } finally {
-      (_n = this.notificationRouter) == null ? void 0 : _n.endTurn();
+      (_m = this.notificationRouter) == null ? void 0 : _m.endTurn();
       this.cleanupActiveInputBundles();
       this.currentTurnId = null;
       this.currentQueryThreadId = null;
@@ -37394,7 +37574,7 @@ var CodexChatRuntime = class {
         if (threadId) {
           const sessionFilePath = findCodexSessionFile(
             threadId,
-            (_p = this.resolveTranscriptRootHost((_o = this.session.getSessionFilePath()) != null ? _o : this.currentThreadPath)) != null ? _p : void 0
+            (_o = this.resolveTranscriptRootHost((_n = this.session.getSessionFilePath()) != null ? _n : this.currentThreadPath)) != null ? _o : void 0
           );
           if (sessionFilePath) {
             this.session.setThread(threadId, sessionFilePath);
@@ -37584,7 +37764,34 @@ var CodexChatRuntime = class {
     var _a3;
     const providerSettings = this.getProviderSettings();
     const model = (_a3 = queryOptions == null ? void 0 : queryOptions.model) != null ? _a3 : providerSettings.model;
-    return model ? toCodexRuntimeModelId(model) : void 0;
+    return resolveCodexListedModel(providerSettings, model);
+  }
+  async refreshModelCatalog() {
+    const transport = this.transport;
+    if (!transport) {
+      return;
+    }
+    let models;
+    try {
+      models = await listCodexModels(transport);
+    } catch (e2) {
+      return;
+    }
+    if (models.length === 0) {
+      return;
+    }
+    const settings = this.plugin.settings;
+    const assignActiveModel = ProviderRegistry.resolveSettingsProviderId(settings) === this.providerId;
+    if (!storeCodexDiscoveredModels(settings, models, assignActiveModel)) {
+      return;
+    }
+    await this.plugin.saveSettings();
+    this.refreshModelSelectors();
+  }
+  refreshModelSelectors() {
+    for (const view of this.plugin.getAllViews()) {
+      view.refreshModelSelector();
+    }
   }
   resolveSandboxConfig() {
     const providerSettings = this.getProviderSettings();
