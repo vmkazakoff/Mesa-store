@@ -72,6 +72,22 @@
       "path": "plugins/mesa-html",
       "minAppVersion": "1.4.0",
       "description": "Редактор кода и красивый HTML внутри vault, плюс показ типов файлов, которые Obsidian по умолчанию прячет"
+    },
+    {
+      "id": "mesa-record",
+      "name": "Mesa | Record",
+      "version": "1.0.0",
+      "path": "plugins/mesa-record",
+      "minAppVersion": "1.5.0",
+      "description": "Запись звука в заметку: волна, пауза и эмбед для транскрипта"
+    },
+    {
+      "id": "mesa-transcribe",
+      "name": "Mesa | Transcribe",
+      "version": "1.0.0",
+      "path": "plugins/mesa-transcribe",
+      "minAppVersion": "1.4.0",
+      "description": "Транскрипт под уже готовой записью в заметке"
     }
   ]
 }

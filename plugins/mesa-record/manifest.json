@@ -1,0 +1,9 @@
+{
+	"id": "mesa-record",
+	"name": "Mesa | Record",
+	"version": "1.0.0",
+	"minAppVersion": "1.5.0",
+	"description": "Запись звука в заметку: волна, пауза и эмбед для транскрипта",
+	"author": "MKRobotsAI",
+	"isDesktopOnly": true
+}

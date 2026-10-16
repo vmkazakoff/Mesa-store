@@ -1,0 +1,222 @@
+.cm-widget:has(> .mesa-record-host) {
+	display: block;
+	width: 100%;
+}
+
+.mesa-record-host {
+	display: block;
+	width: 100%;
+	background: transparent !important;
+	border: none !important;
+	padding: 0 !important;
+	box-shadow: none !important;
+}
+
+.cm-preview-code-block:has(.mesa-record-host) {
+	background: transparent !important;
+	border: none !important;
+	padding: 0 !important;
+	box-shadow: none !important;
+}
+
+.cm-preview-code-block:has(.mesa-record-host) .edit-block-button {
+	display: none !important;
+}
+
+.mesa-record-bar {
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	max-width: 100%;
+	height: 36px;
+	margin: var(--size-4-1) 0;
+	padding: 0 6px 0 5px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-family: var(--font-interface);
+}
+
+.mesa-record-bar.is-note {
+	height: auto;
+	min-height: 36px;
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+.mesa-record-round {
+	width: 26px;
+	height: 26px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 50%;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+}
+
+.mesa-record-round:hover {
+	background: var(--background-modifier-hover);
+}
+
+.mesa-record-round.is-live {
+	color: var(--color-red);
+}
+
+.mesa-record-round:disabled {
+	opacity: 0.7;
+	cursor: default;
+}
+
+.mesa-record-round svg {
+	display: block;
+	width: 12px;
+	height: 12px;
+}
+
+.mesa-record-time {
+	flex: none;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-small);
+	white-space: nowrap;
+}
+
+.mesa-record-time .is-dim,
+.mesa-record-device,
+.mesa-record-message {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.mesa-record-device,
+.mesa-record-message {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mesa-record-device {
+	max-width: 9rem;
+}
+
+.mesa-record-message {
+	flex: 1;
+}
+
+.mesa-record-device.is-error {
+	color: var(--text-error);
+}
+
+.mesa-record-bar .mesa-record-wave {
+	display: block;
+	flex: 1 1 0;
+	width: 0;
+	min-width: 0;
+	max-width: 100%;
+	height: 22px;
+	margin: 0;
+	box-sizing: border-box;
+}
+
+.mesa-record-wave.is-seek {
+	cursor: pointer;
+	touch-action: none;
+}
+
+.mesa-record-chip,
+.mesa-record-text {
+	flex: none;
+	height: 24px;
+	padding: 0 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font: inherit;
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.mesa-record-chip.is-on {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: transparent;
+}
+
+.mesa-record-chip:hover,
+.mesa-record-text:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.mesa-record-chip.is-on:hover {
+	background: var(--interactive-accent-hover);
+	color: var(--text-on-accent);
+}
+
+.mesa-record-chip:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.mesa-record-engine {
+	display: none !important;
+}
+
+.mesa-record-status {
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+
+.mesa-record-status.is-live,
+.mesa-record-ribbon.is-live {
+	color: var(--color-red);
+}
+
+.mesa-record-settings .is-file {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.mesa-record-settings .is-file .setting-item-control,
+.mesa-record-settings .is-file .setting-item-control input {
+	width: 100%;
+}
+
+.mesa-record-settings .is-place {
+	align-items: flex-start;
+}
+
+.mesa-record-settings .is-place .setting-item-info {
+	flex: none;
+	padding-top: 6px;
+	white-space: nowrap;
+}
+
+.mesa-record-settings .is-place .setting-item-control {
+	flex: 1;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	min-width: 0;
+}
+
+.mesa-record-settings .is-place select,
+.mesa-record-settings .is-place input {
+	width: 100%;
+	max-width: 100%;
+}
+
+.internal-embed.media-embed:has(.mesa-record-player),
+.markdown-source-view.mod-cm6 .cm-embed-block:has(.mesa-record-player) {
+	height: auto !important;
+	overflow: visible !important;
+}
