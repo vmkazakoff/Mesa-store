@@ -22424,8 +22424,7 @@ function findCodexDiscoveredModel(models, modelId) {
 }
 function findPreferredCodexModel(models) {
   var _a3, _b3;
-  const visible = models.filter((model) => !model.hidden);
-  return (_b3 = (_a3 = visible.find((model) => model.isDefault)) != null ? _a3 : visible[0]) != null ? _b3 : null;
+  return (_b3 = (_a3 = models.find((model) => model.isDefault)) != null ? _a3 : models[0]) != null ? _b3 : null;
 }
 async function listCodexModels(transport) {
   const models = [];
@@ -22433,13 +22432,13 @@ async function listCodexModels(transport) {
   let cursor = null;
   for (let page = 0; page < MAX_MODEL_LIST_PAGES; page += 1) {
     const result = await transport.request("model/list", {
-      includeHidden: false,
+      includeHidden: true,
       limit: MODEL_LIST_PAGE_SIZE,
       ...cursor ? { cursor } : {}
     });
     const pageModels = normalizeCodexDiscoveredModels(result == null ? void 0 : result.data);
     for (const model of pageModels) {
-      if (model.hidden || seen.has(model.model)) {
+      if (seen.has(model.model)) {
         continue;
       }
       seen.add(model.model);
@@ -23125,6 +23124,7 @@ var ru2 = {
     "status": {
       "completed": "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
       "error": "\u041E\u0448\u0438\u0431\u043A\u0430",
+      "blocked": "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E",
       "inProgress": "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435",
       "runningAria": "\u0421\u0442\u0430\u0442\u0443\u0441: \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F",
       "errorAria": "\u0421\u0442\u0430\u0442\u0443\u0441: \u043E\u0448\u0438\u0431\u043A\u0430"
@@ -24361,7 +24361,7 @@ function pickSessionMetadata(metadata) {
   for (const key of PERSISTED_SESSION_METADATA_KEYS) {
     const value = metadata[key];
     if (value !== void 0) {
-      picked[key] = value;
+      Object.assign(picked, { [key]: value });
     }
   }
   return picked;
@@ -34411,9 +34411,9 @@ var QueryBackedInlineEditService = class {
 
 // src/providers/codex/modelOptions.ts
 function getCodexModelOptions(settings) {
-  const visible = getCodexProviderSettings(settings).discoveredModels.filter((model) => !model.hidden);
-  const preferred = visible.find((model) => model.isDefault);
-  const ordered = preferred ? [preferred, ...visible.filter((model) => model.model !== preferred.model)] : visible;
+  const models = getCodexProviderSettings(settings).discoveredModels;
+  const preferred = models.find((model) => model.isDefault);
+  const ordered = preferred ? [preferred, ...models.filter((model) => model.model !== preferred.model)] : models;
   return ordered.map((model) => ({
     value: model.model,
     label: model.displayName || model.model,
@@ -44161,6 +44161,15 @@ function findRewindContext(messages, userIndex) {
 }
 
 // src/features/chat/controllers/ConversationController.ts
+var WELCOME_DAY_KEYS = [
+  "welcome.day0",
+  "welcome.day1",
+  "welcome.day2",
+  "welcome.day3",
+  "welcome.day4",
+  "welcome.day5",
+  "welcome.day6"
+];
 function runConversationAction(action, failureMessage) {
   void action().catch(() => {
     new import_obsidian7.Notice(failureMessage);
@@ -44742,7 +44751,7 @@ var ConversationController = class {
       }
       return name ? template.replace("{name}", `, ${name}`) : template.replace("{name}", "");
     };
-    const dayGreetings = tArray(`welcome.day${day}`).map(formatWelcome);
+    const dayGreetings = tArray(WELCOME_DAY_KEYS[day]).map(formatWelcome);
     let timeGreetings = [];
     if (hour >= 5 && hour < 12) {
       timeGreetings = tArray("welcome.timeMorning").map(formatWelcome);
@@ -45227,6 +45236,19 @@ var InstructionModal = class extends import_obsidian9.Modal {
   }
 };
 
+// src/utils/markdown.ts
+function appendMarkdownSnippet(existingPrompt, snippet) {
+  const trimmedSnippet = snippet.trim();
+  if (!trimmedSnippet) {
+    return existingPrompt;
+  }
+  if (!existingPrompt.trim()) {
+    return trimmedSnippet;
+  }
+  const separator = existingPrompt.endsWith("\n\n") ? "" : existingPrompt.endsWith("\n") ? "\n" : "\n\n";
+  return existingPrompt + separator + trimmedSnippet;
+}
+
 // src/features/chat/constants.ts
 var COMPLETION_FLAVOR_WORDS = tArray("flavor.completion");
 var FLAVOR_TEXTS = tArray("flavor.thinking");
@@ -45536,7 +45558,7 @@ var InlineAskUserQuestion = class {
     });
     this.currentItems.push(cancelRow);
     this.contentArea.createDiv({
-      text: HINTS_TEXT,
+      text: HINTS_TEXT(),
       cls: "mesa-ask-hints"
     });
   }
@@ -46348,6 +46370,12 @@ function renderTodoItems(container, todos) {
 }
 
 // src/features/chat/rendering/ToolCallRenderer.ts
+var TOOL_STATUS_LABEL_KEYS = {
+  running: "tools.status.inProgress",
+  completed: "tools.status.completed",
+  error: "tools.status.error",
+  blocked: "tools.status.blocked"
+};
 function setToolIcon(el2, name) {
   const icon = getToolIcon(name);
   if (icon === MCP_ICON_MARKER) {
@@ -46997,7 +47025,7 @@ function setTodoWriteStatus(statusEl, input) {
   if (isComplete) (0, import_obsidian11.setIcon)(statusEl, "check");
 }
 function setToolStatus(statusEl, status) {
-  const statusLabel = t10(`tools.status.${status}`);
+  const statusLabel = t10(TOOL_STATUS_LABEL_KEYS[status]);
   resetStatusElement(statusEl, `status-${status}`, statusLabel);
   const icon = STATUS_ICONS[status];
   if (icon) (0, import_obsidian11.setIcon)(statusEl, icon);
@@ -47726,7 +47754,7 @@ var InputController = class {
     const { content, images } = message;
     const inputEl = this.deps.getInputEl();
     const currentContent = options.mergeWithComposer ? inputEl.value.trim() : "";
-    inputEl.value = currentContent ? appendMarkdownSnippet(content, currentContent) : content;
+    inputEl.value = currentContent ? appendMarkdownSnippet(currentContent, content) : content;
     const imageContextManager = this.deps.getImageContextManager();
     const currentImages = options.mergeWithComposer ? (_a3 = imageContextManager == null ? void 0 : imageContextManager.getAttachedImages()) != null ? _a3 : [] : [];
     const restoredImages = [...images != null ? images : [], ...currentImages];
@@ -48161,7 +48189,7 @@ var InputController = class {
       instructionRefineService.resetConversation();
       const result = await instructionRefineService.refineInstruction(
         rawInstruction,
-        existingPrompt
+        ""
       );
       if (wasCancelled) {
         return;
@@ -56567,6 +56595,9 @@ function generateSessionId() {
 }
 
 // src/features/chat/session/ChatSession.ts
+function isSessionClosing(session) {
+  return session.lifecycleState === "closing";
+}
 function getSharedSelectionFocusScopeEls(component) {
   var _a3, _b3;
   const host = component;
@@ -56893,7 +56924,7 @@ function buildSessionDOM(contentEl) {
 }
 async function initializeSessionService(session, plugin, conversationOverride) {
   var _a3;
-  if (session.lifecycleState === "closing") {
+  if (isSessionClosing(session)) {
     return;
   }
   const conversation = conversationOverride != null ? conversationOverride : session.conversationId ? await plugin.getConversationById(session.conversationId) : null;
@@ -56920,7 +56951,7 @@ async function initializeSessionService(session, plugin, conversationOverride) {
       const externalContextPaths = hasMessages ? conversation.externalContextPaths || [] : plugin.settings.persistentExternalContextPaths || [];
       runtime.syncConversationState(conversation, externalContextPaths);
     }
-    if (session.lifecycleState === "closing") {
+    if (isSessionClosing(session)) {
       unsubscribeReadyState == null ? void 0 : unsubscribeReadyState();
       service == null ? void 0 : service.cleanup();
       return;
