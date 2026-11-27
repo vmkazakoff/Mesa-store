@@ -1,7 +1,7 @@
 {
 	"id": "mesa-skills",
 	"name": "Mesa | Skills",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.0.0",
 	"description": "Создаёт папку AGENTS, через которую синхронизируются навыки, правила и команды агентов",
 	"author": "MKRobotsAI",

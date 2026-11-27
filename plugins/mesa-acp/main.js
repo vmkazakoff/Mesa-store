@@ -43219,6 +43219,25 @@ var SharedStorageService = class {
   }
 };
 
+// src/core/providers/providerSignal.ts
+var ACP_PROVIDERS_CHANGED_EVENT = "mesa-acp:providers-changed";
+var PROVIDER_IDS = ["claude", "codex", "opencode"];
+function providerEnabledSignature(settings) {
+  const configs = settings.providerConfigs;
+  if (!configs || typeof configs !== "object" || Array.isArray(configs)) {
+    return "000";
+  }
+  const map = configs;
+  return PROVIDER_IDS.map((id) => {
+    var _a3;
+    return ((_a3 = map[id]) == null ? void 0 : _a3.enabled) === true ? "1" : "0";
+  }).join("");
+}
+function providerSignalSnapshot(settings) {
+  const selected = typeof settings.settingsProvider === "string" ? settings.settingsProvider : "";
+  return `${providerEnabledSignature(settings)}|${selected}`;
+}
+
 // src/features/chat/MesaView.ts
 var import_obsidian27 = require("obsidian");
 
@@ -58379,8 +58398,9 @@ var MesaView = class extends import_obsidian27.ItemView {
           this.persistSessionState();
           this.syncProviderBrandColor();
         },
-        onProviderChanged: () => {
+        onProviderChanged: (providerId) => {
           this.syncProviderBrandColor();
+          this.plugin.notifyProvidersChanged(providerId);
         }
       }
     );
@@ -60278,6 +60298,7 @@ var MesaPlugin = class extends import_obsidian33.Plugin {
   constructor() {
     super(...arguments);
     this.conversations = [];
+    this.lastProviderSignal = null;
   }
   async onload() {
     await this.loadSettings();
@@ -60396,6 +60417,7 @@ var MesaPlugin = class extends import_obsidian33.Plugin {
       ...DEFAULT_MESA_SETTINGS,
       ...mesa
     };
+    this.lastProviderSignal = providerSignalSnapshot(this.settings);
     if (this.settings.permissionMode === "plan") {
       this.settings.permissionMode = "normal";
     }
@@ -60486,6 +60508,15 @@ var MesaPlugin = class extends import_obsidian33.Plugin {
       this.settings
     );
     await this.storage.saveMesaSettings(this.settings);
+    const snapshot = providerSignalSnapshot(this.settings);
+    if (this.lastProviderSignal !== snapshot) {
+      this.lastProviderSignal = snapshot;
+      this.app.workspace.trigger(ACP_PROVIDERS_CHANGED_EVENT);
+    }
+  }
+  /** Let dependent plugins know which agent is now active. */
+  notifyProvidersChanged(providerId) {
+    this.app.workspace.trigger(ACP_PROVIDERS_CHANGED_EVENT, providerId);
   }
   /** Updates and persists environment variables, restarting processes to apply changes. */
   async applyEnvironmentVariables(scope, envText) {

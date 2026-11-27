@@ -20,7 +20,7 @@
     {
       "id": "mesa-acp",
       "name": "Mesa | ACP",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "path": "plugins/mesa-acp",
       "minAppVersion": "1.7.2",
       "description": "AI-агент в сайдбаре Obsidian через Agent Client Protocol"
@@ -52,7 +52,7 @@
     {
       "id": "mesa-skills",
       "name": "Mesa | Skills",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "path": "plugins/mesa-skills",
       "minAppVersion": "1.0.0",
       "description": "Создаёт папку AGENTS, через которую синхронизируются навыки, правила и команды агентов"
