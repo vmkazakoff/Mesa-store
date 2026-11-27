@@ -84,7 +84,7 @@
     {
       "id": "mesa-transcribe",
       "name": "Mesa | Transcribe",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "path": "plugins/mesa-transcribe",
       "minAppVersion": "1.4.0",
       "description": "Транскрипт под уже готовой записью в заметке"
